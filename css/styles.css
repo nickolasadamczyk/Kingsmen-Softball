@@ -98,9 +98,10 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 0.66rem;
   font-weight: 600;
 }
-.tab .tab-ico { font-size: 1.25rem; }
+.tab .tab-ico { font-size: 1.25rem; height: 24px; display: grid; place-items: center; }
+.tab .tab-ico svg { width: 23px; height: 23px; display: block; transition: transform 0.12s; }
 .tab.active { color: var(--gold-light); }
-.tab.active .tab-ico { transform: translateY(-1px); }
+.tab.active .tab-ico svg { transform: translateY(-1px) scale(1.08); }
 
 /* Cards */
 .card {
