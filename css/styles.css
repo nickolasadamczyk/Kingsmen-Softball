@@ -236,6 +236,36 @@ table.stats td.hl { color: var(--gold-light); font-weight: 700; }
 .atbat-card { border: 1px solid var(--gold); }
 .now-batting { color: var(--gold-light); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
 
+/* Diamond / bases */
+.diamond { position: relative; width: 170px; height: 170px; margin: 6px auto 2px; }
+.base {
+  position: absolute; width: 46px; height: 46px;
+  background: var(--surface-2); border: 2px solid var(--line);
+  transform: rotate(45deg); display: grid; place-items: center;
+  border-radius: 6px;
+}
+.base .base-runner { transform: rotate(-45deg); font-size: 0.78rem; font-weight: 800; color: var(--gold-light); }
+.base.occupied { background: var(--gold); border-color: var(--gold-light); box-shadow: 0 0 14px rgba(255,198,41,0.4); }
+.base.occupied .base-runner { color: #1a1200; }
+.base.b2 { top: 0; left: 50%; margin-left: -23px; }
+.base.b1 { top: 50%; right: 0; margin-top: -23px; }
+.base.b3 { top: 50%; left: 0; margin-top: -23px; }
+.base.home { bottom: 0; left: 50%; margin-left: -23px; background: transparent; border-color: var(--green-light); }
+.base.home .base-runner { font-size: 1rem; }
+
+.outs-wrap { display: flex; align-items: center; gap: 8px; }
+.outs-row { display: flex; gap: 5px; }
+.out-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); display: inline-block; }
+.out-dot.on { background: var(--bad); border-color: var(--bad); }
+
+/* Play editor */
+.runner-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.runner-name { min-width: 92px; }
+.seg.wrap { flex-wrap: wrap; border: none; gap: 5px; }
+.seg.wrap button { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font-size: 0.74rem; }
+.seg.wrap button.on-sel { background: var(--gold); color: #1a1200; border-color: transparent; }
+.play-summary { display: flex; gap: 8px; flex-wrap: wrap; }
+
 /* Modal */
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(0,0,0,0.6);

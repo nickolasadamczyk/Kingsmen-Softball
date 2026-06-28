@@ -97,13 +97,21 @@
         var att = attendanceSummary(g);
         b.appendChild(el('div', { class: 'small muted mb', text: 'Checked in: ' + att.in + ' in · ' + att.maybe + ' maybe · ' + att.out + ' out' }));
 
+        if (g.positions && Object.keys(g.positions).some(function (k) { return g.positions[k]; })) {
+          b.appendChild(positionsSummary(g));
+        }
+
         b.appendChild(el('div', { class: 'divider' }));
         var actions = el('div', { class: 'btn-row' });
         if (g.status === 'scheduled') {
-          actions.appendChild(el('button', { class: 'btn green', text: '🔨 Set Lineup', onclick: function () { closeModal(); lineupBuilder(id); } }));
+          actions.appendChild(el('button', { class: 'btn green', text: '🔨 Batting Lineup', onclick: function () { closeModal(); lineupBuilder(id); } }));
+          actions.appendChild(el('button', { class: 'btn green', text: '🧤 Field Positions', onclick: function () { closeModal(); positionsEditor(id); } }));
           actions.appendChild(el('button', { class: 'btn primary', text: '⚾ Start Game', onclick: function () { closeModal(); Live.startGame(id); } }));
         } else if (g.status === 'live') {
           actions.appendChild(el('button', { class: 'btn primary', text: '⚾ Open Live', onclick: function () { closeModal(); App.go('live'); } }));
+          actions.appendChild(el('button', { class: 'btn', text: '🧤 Field Positions', onclick: function () { closeModal(); positionsEditor(id); } }));
+        } else {
+          actions.appendChild(el('button', { class: 'btn', text: '🧤 Field Positions', onclick: function () { closeModal(); positionsEditor(id); } }));
         }
         actions.appendChild(el('button', { class: 'btn', text: 'Edit', onclick: function () { closeModal(); editGame(id); } }));
         actions.appendChild(el('button', { class: 'btn danger', text: 'Delete', onclick: function () {
@@ -208,6 +216,90 @@
     });
   }
 
+  /* ---- Field positions (per game) ---- */
+  // Standard slow-pitch defense: 10 fielders (4 outfielders)
+  var POSITION_SLOTS = [
+    { key: 'P', label: 'Pitcher' },
+    { key: 'C', label: 'Catcher' },
+    { key: '1B', label: 'First Base' },
+    { key: '2B', label: 'Second Base' },
+    { key: '3B', label: 'Third Base' },
+    { key: 'SS', label: 'Shortstop' },
+    { key: 'LF', label: 'Left Field' },
+    { key: 'LCF', label: 'Left-Center' },
+    { key: 'RCF', label: 'Right-Center' },
+    { key: 'RF', label: 'Right Field' }
+  ];
+
+  function positionsSummary(g) {
+    var wrap = el('div', { class: 'mb' }, [el('div', { class: 'small gold mb', text: 'Field Positions' })]);
+    var chips = el('div', { class: 'chips' });
+    POSITION_SLOTS.forEach(function (slot) {
+      var pid = g.positions && g.positions[slot.key];
+      if (!pid) return;
+      var p = Store.getPlayer(pid);
+      chips.appendChild(el('span', { class: 'chip on', text: slot.key + ' · ' + (p ? p.name : '—') }));
+    });
+    wrap.appendChild(chips);
+    return wrap;
+  }
+
+  function positionsEditor(id) {
+    var g = Store.getGame(id);
+    if (!g) return;
+    if (!g.positions) g.positions = {};
+
+    U.modal({
+      title: 'Field Positions',
+      body: function (b, close) {
+        b.appendChild(el('p', { class: 'small muted mb', text: 'Assign who plays each spot this game. Checked-in players are listed first. Leave blank for unused spots.' }));
+
+        var roster = Store.activePlayers().slice().sort(function (a, c) {
+          var ai = g.attendance && g.attendance[a.id] === 'in' ? 0 : 1;
+          var bi = g.attendance && g.attendance[c.id] === 'in' ? 0 : 1;
+          if (ai !== bi) return ai - bi;
+          return (a.name || '').localeCompare(c.name || '');
+        });
+
+        function refreshDupWarn() {
+          var used = {};
+          var dup = false;
+          POSITION_SLOTS.forEach(function (slot) {
+            var pid = g.positions[slot.key];
+            if (!pid) return;
+            if (used[pid]) dup = true;
+            used[pid] = true;
+          });
+          warn.textContent = dup ? '⚠️ A player is assigned to more than one position.' : '';
+        }
+
+        POSITION_SLOTS.forEach(function (slot) {
+          var sel = el('select', { onchange: function () { g.positions[slot.key] = sel.value || undefined; if (!sel.value) delete g.positions[slot.key]; Store.saveGame(); refreshDupWarn(); } });
+          sel.appendChild(el('option', { value: '', text: '— none —' }));
+          roster.forEach(function (p) {
+            var inGame = g.attendance && g.attendance[p.id] === 'in';
+            var opt = el('option', { value: p.id, text: p.name + (inGame ? ' ✓' : '') + (p.number !== '' && p.number != null ? ' #' + p.number : '') });
+            if (g.positions[slot.key] === p.id) opt.selected = true;
+            sel.appendChild(opt);
+          });
+          b.appendChild(el('label', { class: 'field' }, [
+            el('span', { text: slot.key + ' — ' + slot.label }),
+            sel
+          ]));
+        });
+
+        var warn = el('div', { class: 'small', style: 'color:var(--warn);min-height:18px' });
+        b.appendChild(warn);
+        refreshDupWarn();
+
+        b.appendChild(el('div', { class: 'btn-row mt' }, [
+          el('button', { class: 'btn ghost', text: 'Clear all', onclick: function () { g.positions = {}; Store.saveGame(); close(); positionsEditor(id); } }),
+          el('button', { class: 'btn primary', text: 'Done', onclick: function () { close(); App.refresh(); } })
+        ]));
+      }
+    });
+  }
+
   /* ---- Lineup builder ---- */
   function lineupBuilder(id) {
     var g = Store.getGame(id);
@@ -288,5 +380,5 @@
 
   function closeModal() { var m = document.querySelector('.modal-backdrop'); if (m) m.remove(); }
 
-  global.Games = { render: render, editGame: editGame, lineupBuilder: lineupBuilder, gameDetail: gameDetail, boxScore: boxScore, lineScoreTable: lineScoreTable };
+  global.Games = { render: render, editGame: editGame, lineupBuilder: lineupBuilder, positionsEditor: positionsEditor, positionsSummary: positionsSummary, POSITION_SLOTS: POSITION_SLOTS, gameDetail: gameDetail, boxScore: boxScore, lineScoreTable: lineScoreTable };
 })(window);
