@@ -1,5 +1,5 @@
 /* sw.js — offline cache for the app shell */
-var CACHE = 'kingsmen-softball-v1';
+var CACHE = 'kingsmen-softball-v2';
 var ASSETS = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ var ASSETS = [
   './js/games.js',
   './js/live.js',
   './js/statsview.js',
+  './js/summary.js',
   './js/settings.js',
   './js/app.js',
   './icons/icon.svg',

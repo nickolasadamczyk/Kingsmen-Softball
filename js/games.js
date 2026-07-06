@@ -150,6 +150,7 @@
           actions.appendChild(el('button', { class: 'btn', text: '🧤 Field Positions', onclick: function () { closeModal(); positionsEditor(id); } }));
           actions.appendChild(el('button', { class: 'btn', text: '⚙️ Slow-Pitch Rules', onclick: function () { closeModal(); rulesEditor(id); } }));
         } else {
+          actions.appendChild(el('button', { class: 'btn primary', text: '📋 Game Summary', onclick: function () { closeModal(); Summary.open(id); } }));
           actions.appendChild(el('button', { class: 'btn', text: '🧤 Field Positions', onclick: function () { closeModal(); positionsEditor(id); } }));
         }
         actions.appendChild(el('button', { class: 'btn', text: 'Edit', onclick: function () { closeModal(); editGame(id); } }));

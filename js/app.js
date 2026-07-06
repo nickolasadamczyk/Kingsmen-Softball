@@ -13,13 +13,18 @@
   };
 
   var current = 'roster';
+  var overlay = null; // {render: fn(view)} — a full-screen sub-view above the tabs
 
   function go(tab) {
     if (!TABS[tab]) tab = 'roster';
+    overlay = null;
     current = tab;
     try { localStorage.setItem('kingsmen_tab', tab); } catch (e) {}
     refresh();
   }
+
+  function openOverlay(renderFn) { overlay = { render: renderFn }; refresh(); }
+  function closeOverlay() { overlay = null; refresh(); }
 
   function refresh() {
     var view = document.getElementById('view');
@@ -27,7 +32,7 @@
     // live badge on tab
     updateTabs();
     try {
-      TABS[current].render(view);
+      (overlay ? overlay.render : TABS[current].render)(view);
     } catch (e) {
       console.error(e);
       view.appendChild(U.el('div', { class: 'empty' }, [
@@ -76,7 +81,7 @@
     go(saved);
   }
 
-  global.App = { go: go, refresh: refresh, applyTeam: applyTeam };
+  global.App = { go: go, refresh: refresh, applyTeam: applyTeam, openOverlay: openOverlay, closeOverlay: closeOverlay };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
