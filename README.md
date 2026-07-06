@@ -16,8 +16,9 @@ open `index.html` and go.
 | **Check-In** | Per-game attendance for **players _and_ coaches** — In / Maybe / Out, with live counts and one-tap "all players in." |
 | **Games** | Schedule games (date, opponent, home/away, field), see a running **W-L record**, and review final box scores. |
 | **Lineup** | Batting-order builder (▲▼ to reorder); prioritizes checked-in players. |
-| **Field positions** | Per-game defensive assignments for all 10 slow-pitch spots (P, C, 1B, 2B, 3B, SS, LF, LCF, RCF, RF), with a duplicate-player warning. |
-| **Live (play-by-play)** | Real-time **scoreboard + base diamond + outs**. Record each batter (1B/2B/3B/HR/BB/SF/K/OUT/FC/ROE), then set exactly where the batter **and every base runner** ends up — 1st / 2nd / 3rd / Home / Out — so runs, RBIs and outs are tracked play by play. Inning-by-inning line score, on-deck batter, and **Undo**. |
+| **Field positions** | Per-game defensive assignments for either **4 outfielders** (P, C, 1B, 2B, 3B, SS, LF, LCF, RCF, RF) or a **rover** setup (3 OF + rover), with a duplicate-player warning. |
+| **Slow-pitch rules** | Per-game rule config: **starting count** (default 1‑1), **foul-on-third-strike-is-an-out** toggle, **home-run limit** (2–6 or none) with over-limit HRs counting as an out or a single, and the 4‑OF vs rover choice. **No stealing / leadoffs / wild pitches** — base movement only happens on a batted ball or a forced walk. |
+| **Live (play-by-play)** | Real-time **scoreboard + base diamond + outs + pitch count**. Tap Ball / Strike / Foul to run the count (auto-walks and auto-strikeouts per the rules); or record a batted ball (1B/2B/3B/HR/BB/SF/K/OUT/FC/ROE) and set exactly where the batter **and every base runner** ends up — 1st / 2nd / 3rd / Home / Out. Runs, RBIs and outs tracked play by play, with a line score, on-deck batter, and multi-step **Undo**. |
 | **Stats** | Season leaderboards, team batting totals, and a sortable per-player table — AVG / OBP / SLG / OPS plus H, HR, RBI, R, BB, K and more. Season totals roll up automatically from every completed game. |
 | **Backup** | Export/import all data as a JSON file (Settings ⚙️). Reset when you want a clean slate. |
 | **Installable** | Add to Home Screen on a phone — works offline as a PWA. |

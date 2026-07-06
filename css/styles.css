@@ -258,6 +258,15 @@ table.stats td.hl { color: var(--gold-light); font-weight: 700; }
 .out-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); display: inline-block; }
 .out-dot.on { background: var(--bad); border-color: var(--bad); }
 
+/* Pitch count tracker */
+.count-box { background: var(--surface-2); border-radius: 12px; padding: 12px; }
+.count-face { display: flex; align-items: center; justify-content: center; gap: 16px; }
+.count-num { display: flex; flex-direction: column; align-items: center; min-width: 62px; }
+.count-num .v { font-size: 2rem; font-weight: 800; color: var(--gold-light); line-height: 1; }
+.count-num .k { font-size: 0.66rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 3px; }
+.count-sep { font-size: 1.6rem; color: var(--muted); }
+.count-btns .btn { flex: 1; }
+
 /* Play editor */
 .runner-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .runner-name { min-width: 92px; }

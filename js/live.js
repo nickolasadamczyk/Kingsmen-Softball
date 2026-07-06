@@ -21,6 +21,7 @@
   }
 
   function ensureShape(g) {
+    Games.ensureRules(g);
     if (!g.innings || !g.innings.length) g.innings = [{ us: 0, them: 0 }];
     if (g.currentInning == null) g.currentInning = 0;
     if (g.battingIndex == null) g.battingIndex = 0;
@@ -29,6 +30,13 @@
     if (g.outs == null) g.outs = 0;
     if (!g.plays) g.plays = [];
     if (!g.positions) g.positions = {};
+    if (!g.hrUsed) g.hrUsed = { us: 0, them: 0 };
+    if (!g.count) resetCount(g);
+  }
+
+  function resetCount(g) {
+    var sc = g.rules.startingCount;
+    g.count = { balls: sc.balls, strikes: sc.strikes };
   }
 
   function battingOrder(g) {
@@ -62,7 +70,7 @@
       el('div', { class: 'row-between mb' }, [
         el('strong', { text: 'Inning ' + (g.currentInning + 1) }),
         el('div', { class: 'btn-row' }, [
-          el('button', { class: 'btn sm ghost', text: '‹ Prev', disabled: g.currentInning === 0, onclick: function () { g.currentInning--; g.outs = 0; g.bases = { 1: null, 2: null, 3: null }; Store.saveGame(); App.refresh(); } }),
+          el('button', { class: 'btn sm ghost', text: '‹ Prev', disabled: g.currentInning === 0, onclick: function () { g.currentInning--; g.outs = 0; g.bases = { 1: null, 2: null, 3: null }; resetCount(g); Store.saveGame(); App.refresh(); } }),
           el('button', { class: 'btn sm', text: 'New inning ›', onclick: function () { nextInning(g); } })
         ])
       ]),
@@ -115,6 +123,7 @@
     if (g.currentInning >= g.innings.length) g.innings.push({ us: 0, them: 0 });
     g.outs = 0;
     g.bases = { 1: null, 2: null, 3: null };
+    resetCount(g);
     Store.saveGame();
     App.refresh();
   }
@@ -174,6 +183,8 @@
     var batter = Store.getPlayer(batterId);
     var onDeck = Store.getPlayer(order[(g.battingIndex + 1) % order.length]);
 
+    var hrLeft = (g.rules.hrLimit == null) ? null : Math.max(0, g.rules.hrLimit - (g.hrUsed.us || 0));
+
     var card = el('div', { class: 'card atbat-card' }, [
       el('div', { class: 'row-between mb' }, [
         el('div', null, [
@@ -184,20 +195,33 @@
       ])
     ]);
 
+    // Count tracker
+    card.appendChild(countTracker(g, batterId));
+
+    // HR limit note
+    if (hrLeft != null) {
+      card.appendChild(el('p', { class: 'tiny center ' + (hrLeft === 0 ? 'muted' : 'gold'), style: 'margin:2px 0 8px',
+        text: hrLeft === 0 ? 'HR limit reached — next HR counts as ' + (g.rules.overLimitHrResult === 'single' ? 'a single' : 'an out') : ('Home runs left: ' + hrLeft + ' of ' + g.rules.hrLimit) }));
+    }
+
     var grid = el('div', { class: 'ab-grid mb' });
     [
       ['1B', 'green', 'Single'], ['2B', 'green', 'Double'], ['3B', 'green', 'Triple'],
       ['HR', 'primary', 'Home Run'], ['BB', '', 'Walk'], ['SF', '', 'Sac Fly'],
       ['OUT', 'ghost', 'Out'], ['K', 'ghost', 'Strikeout'], ['FC', 'ghost', "Fielder's Ch."]
     ].forEach(function (o) {
-      grid.appendChild(el('button', { class: 'btn ' + o[1], text: o[2], onclick: function () { openPlayEditor(g, batterId, o[0]); } }));
+      grid.appendChild(el('button', { class: 'btn ' + o[1], text: o[2], onclick: function () {
+        if (o[0] === 'HR') { hitHomeRun(g, batterId); return; }
+        if (o[0] === 'BB') { recordWalk(g, batterId); return; }
+        openPlayEditor(g, batterId, o[0]);
+      } }));
     });
     card.appendChild(grid);
 
     card.appendChild(el('div', { class: 'btn-row' }, [
       el('button', { class: 'btn ghost sm', text: 'Reached on Error', onclick: function () { openPlayEditor(g, batterId, 'ROE'); } }),
       el('button', { class: 'btn sm', text: 'Skip ▸', onclick: function () { g.battingIndex = (g.battingIndex + 1) % order.length; Store.saveGame(); App.refresh(); } }),
-      g.plays && g.plays.length ? el('button', { class: 'btn danger sm', text: '↶ Undo', onclick: function () { undoLast(g); } }) : null
+      g._undo && g._undo.length ? el('button', { class: 'btn danger sm', text: '↶ Undo', onclick: function () { undoLast(g); } }) : null
     ]));
     return card;
   }
@@ -326,15 +350,19 @@
     });
   }
 
+  // Editor path: snapshot then apply.
   function applyPlay(g, batterId, code, ends, runners, rbi) {
-    snapshot(g); // for undo
+    snapshot(g);
+    applyResolved(g, batterId, code, ends, runners, rbi);
+  }
 
-    // batting stat line
+  // Core mutation (no snapshot). Callers snapshot first.
+  function applyResolved(g, batterId, code, ends, runners, rbi) {
     if (!g.stats[batterId]) g.stats[batterId] = Stats.blankLine();
     Stats.applyOutcome(g.stats[batterId], code, 0); // counts pa/ab/h/etc, rbi added below
     g.stats[batterId].rbi += (rbi || 0);
+    if (code === 'HR') g.hrUsed.us = (g.hrUsed.us || 0) + 1;
 
-    // resolve new base state + runs + outs from the editor
     var newBases = { 1: null, 2: null, 3: null };
     var runs = 0, outs = 0;
     runners.forEach(function (r) {
@@ -342,10 +370,10 @@
       if (d === 'out') { outs++; }
       else if (d === 4) {
         runs++;
-        if (g.stats[r.pid]) g.stats[r.pid].r += 1; else { g.stats[r.pid] = Stats.blankLine(); g.stats[r.pid].r += 1; }
+        if (!g.stats[r.pid]) g.stats[r.pid] = Stats.blankLine();
+        g.stats[r.pid].r += 1;
       } else {
-        // last writer wins if collision; user controls destinations
-        newBases[d] = r.pid;
+        newBases[d] = r.pid; // last writer wins on collision; user controls destinations
       }
     });
 
@@ -355,15 +383,111 @@
 
     var order = battingOrder(g);
     g.battingIndex = (g.battingIndex + 1) % order.length;
+    resetCount(g); // new batter up
 
     g.plays.push({ batterId: batterId, code: code, runs: runs, outs: outs });
 
-    if (g.outs >= 3) {
-      // inning over — strand runners, advance
-      nextInning(g);
+    if (g.outs >= 3) { nextInning(g); return; } // strands runners, advances, resets count
+    Store.saveGame();
+  }
+
+  /* ---------- pitch count (balls / strikes / fouls) ---------- */
+  function countTracker(g, batterId) {
+    var c = g.count;
+    return el('div', { class: 'count-box mb' }, [
+      el('div', { class: 'count-face' }, [
+        el('div', { class: 'count-num' }, [el('span', { class: 'v', text: String(c.balls) }), el('span', { class: 'k', text: 'Balls' })]),
+        el('div', { class: 'count-sep', text: '–' }),
+        el('div', { class: 'count-num' }, [el('span', { class: 'v', text: String(c.strikes) }), el('span', { class: 'k', text: 'Strikes' })])
+      ]),
+      el('div', { class: 'btn-row count-btns', style: 'margin-top:8px' }, [
+        el('button', { class: 'btn sm', text: 'Ball', onclick: function () { onBall(g, batterId); } }),
+        el('button', { class: 'btn sm', text: 'Strike', onclick: function () { onStrike(g, batterId); } }),
+        el('button', { class: 'btn sm', text: 'Foul', onclick: function () { onFoul(g, batterId); } })
+      ])
+    ]);
+  }
+
+  function onBall(g, batterId) {
+    snapshot(g);
+    g.count.balls += 1;
+    if (g.count.balls >= g.rules.maxBalls) { recordWalk(g, batterId, true); return; }
+    Store.saveGame(); App.refresh();
+  }
+
+  function onStrike(g, batterId) {
+    snapshot(g);
+    g.count.strikes += 1;
+    if (g.count.strikes >= g.rules.maxStrikes) { autoOut(g, batterId, 'K', 'Strikeout'); return; }
+    Store.saveGame(); App.refresh();
+  }
+
+  function onFoul(g, batterId) {
+    snapshot(g);
+    if (g.count.strikes >= g.rules.maxStrikes - 1) {
+      // already at two strikes
+      if (g.rules.foulOnThirdStrikeIsOut) { autoOut(g, batterId, 'K', 'Foul out (3rd strike)'); return; }
+      // otherwise foul is a no-count; nothing changes
+      if (g._undo) g._undo.pop(); // discard needless snapshot
+      U.toast('Foul — no change');
       return;
     }
-    Store.saveGame();
+    g.count.strikes += 1;
+    Store.saveGame(); App.refresh();
+  }
+
+  // Auto-record an out (strikeout / foul-out) with no base movement (no stealing in slow-pitch).
+  function autoOut(g, batterId, code, label) {
+    var runners = [];
+    var ends = {};
+    [3, 2, 1].forEach(function (n) { if (g.bases[n]) { ends['base' + n] = n; runners.push({ key: 'base' + n, start: n, pid: g.bases[n] }); } });
+    ends['batter'] = 'out';
+    runners.push({ key: 'batter', start: 0, pid: batterId, isBatter: true });
+    applyResolved(g, batterId, code, ends, runners, 0); // snapshot already taken by count handler
+    App.refresh();
+    U.toast(label);
+  }
+
+  // Walk: batter to 1st, only forced runners advance (no stealing / wild pitches).
+  function recordWalk(g, batterId, snapshotTaken) {
+    if (!snapshotTaken) snapshot(g);
+    var b = g.bases;
+    var ends = {}, runners = [];
+    // forced chain: runner on 1 always forced; on 2 forced only if 1 occupied; on 3 forced only if 1&2 occupied
+    var forced1 = true;
+    var forced2 = !!b[1];
+    var forced3 = !!b[1] && !!b[2];
+    [3, 2, 1].forEach(function (n) {
+      if (!b[n]) return;
+      var dest = n;
+      if (n === 1 && forced1) dest = 2;
+      if (n === 2 && forced2) dest = 3;
+      if (n === 3 && forced3) dest = 4;
+      ends['base' + n] = dest;
+      runners.push({ key: 'base' + n, start: n, pid: b[n] });
+    });
+    ends['batter'] = 1;
+    runners.push({ key: 'batter', start: 0, pid: batterId, isBatter: true });
+    var forcedInRun = forced3 && b[3] ? 1 : 0; // bases loaded walk forces in a run
+    applyResolved(g, batterId, 'BB', ends, runners, forcedInRun);
+    App.refresh();
+    U.toast('Walk');
+  }
+
+  // Home run with slow-pitch limit enforcement.
+  function hitHomeRun(g, batterId) {
+    var lim = g.rules.hrLimit;
+    if (lim != null && (g.hrUsed.us || 0) >= lim) {
+      if (g.rules.overLimitHrResult === 'single') {
+        U.toast('HR limit reached — recorded as a single');
+        openPlayEditor(g, batterId, '1B');
+      } else {
+        U.toast('HR limit reached — batter is out');
+        openPlayEditor(g, batterId, 'OUT');
+      }
+      return;
+    }
+    openPlayEditor(g, batterId, 'HR');
   }
 
   /* ---------- undo via snapshot ---------- */
@@ -371,10 +495,10 @@
     if (!g._undo) g._undo = [];
     g._undo.push(JSON.stringify({
       bases: g.bases, outs: g.outs, currentInning: g.currentInning,
-      battingIndex: g.battingIndex, innings: g.innings, stats: g.stats, plays: g.plays
+      battingIndex: g.battingIndex, innings: g.innings, stats: g.stats,
+      plays: g.plays, count: g.count, hrUsed: g.hrUsed
     }));
-    // cap history
-    if (g._undo.length > 60) g._undo.shift();
+    if (g._undo.length > 250) g._undo.shift();
   }
 
   function undoLast(g) {
@@ -387,9 +511,11 @@
     g.innings = snap.innings;
     g.stats = snap.stats;
     g.plays = snap.plays;
+    if (snap.count) g.count = snap.count;
+    if (snap.hrUsed) g.hrUsed = snap.hrUsed;
     Store.saveGame();
     App.refresh();
-    U.toast('Undid last play');
+    U.toast('Undid last action');
   }
 
   /* ---------- picker (no live game) ---------- */

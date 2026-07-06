@@ -3,6 +3,41 @@
   'use strict';
   var el = U.el;
 
+  /**
+   * @typedef {Object} SlowpitchRules
+   * @property {{balls:number,strikes:number}} startingCount  default 1-1
+   * @property {number} maxBalls   walk threshold (4)
+   * @property {number} maxStrikes strikeout threshold (3)
+   * @property {boolean} foulOnThirdStrikeIsOut  slowpitch toggle
+   * @property {number|null} hrLimit  over-the-fence HR cap per team; null = unlimited
+   * @property {'out'|'single'} overLimitHrResult  what an over-limit HR becomes
+   * @property {'4OF'|'rover'} outfieldConfig  4 outfielders vs 3 OF + rover
+   */
+
+  /** @returns {SlowpitchRules} */
+  function defaultRules() {
+    return {
+      startingCount: { balls: 1, strikes: 1 },
+      maxBalls: 4,
+      maxStrikes: 3,
+      foulOnThirdStrikeIsOut: false,
+      hrLimit: null,
+      overLimitHrResult: 'out',
+      outfieldConfig: '4OF'
+    };
+  }
+
+  /** Backfill rules onto older games so nothing breaks. */
+  function ensureRules(g) {
+    if (!g.rules) g.rules = defaultRules();
+    else {
+      var d = defaultRules();
+      Object.keys(d).forEach(function (k) { if (g.rules[k] === undefined) g.rules[k] = d[k]; });
+      if (!g.rules.startingCount) g.rules.startingCount = d.startingCount;
+    }
+    return g.rules;
+  }
+
   function newGameShape() {
     return {
       date: U.todayISO(),
@@ -10,8 +45,10 @@
       location: '',
       homeAway: 'home',
       status: 'scheduled',
+      rules: defaultRules(),
       innings: [],
       lineup: [],
+      positions: {},
       attendance: {},
       stats: {},
       battingIndex: 0,
@@ -106,10 +143,12 @@
         if (g.status === 'scheduled') {
           actions.appendChild(el('button', { class: 'btn green', text: '🔨 Batting Lineup', onclick: function () { closeModal(); lineupBuilder(id); } }));
           actions.appendChild(el('button', { class: 'btn green', text: '🧤 Field Positions', onclick: function () { closeModal(); positionsEditor(id); } }));
+          actions.appendChild(el('button', { class: 'btn', text: '⚙️ Slow-Pitch Rules', onclick: function () { closeModal(); rulesEditor(id); } }));
           actions.appendChild(el('button', { class: 'btn primary', text: '⚾ Start Game', onclick: function () { closeModal(); Live.startGame(id); } }));
         } else if (g.status === 'live') {
           actions.appendChild(el('button', { class: 'btn primary', text: '⚾ Open Live', onclick: function () { closeModal(); App.go('live'); } }));
           actions.appendChild(el('button', { class: 'btn', text: '🧤 Field Positions', onclick: function () { closeModal(); positionsEditor(id); } }));
+          actions.appendChild(el('button', { class: 'btn', text: '⚙️ Slow-Pitch Rules', onclick: function () { closeModal(); rulesEditor(id); } }));
         } else {
           actions.appendChild(el('button', { class: 'btn', text: '🧤 Field Positions', onclick: function () { closeModal(); positionsEditor(id); } }));
         }
@@ -217,24 +256,38 @@
   }
 
   /* ---- Field positions (per game) ---- */
-  // Standard slow-pitch defense: 10 fielders (4 outfielders)
-  var POSITION_SLOTS = [
+  var INFIELD_SLOTS = [
     { key: 'P', label: 'Pitcher' },
     { key: 'C', label: 'Catcher' },
     { key: '1B', label: 'First Base' },
     { key: '2B', label: 'Second Base' },
     { key: '3B', label: 'Third Base' },
-    { key: 'SS', label: 'Shortstop' },
+    { key: 'SS', label: 'Shortstop' }
+  ];
+  // 4-outfielder slow-pitch defense
+  var SLOTS_4OF = INFIELD_SLOTS.concat([
     { key: 'LF', label: 'Left Field' },
     { key: 'LCF', label: 'Left-Center' },
     { key: 'RCF', label: 'Right-Center' },
     { key: 'RF', label: 'Right Field' }
-  ];
+  ]);
+  // 3 outfielders + a rover (short fielder)
+  var SLOTS_ROVER = INFIELD_SLOTS.concat([
+    { key: 'LF', label: 'Left Field' },
+    { key: 'CF', label: 'Center Field' },
+    { key: 'RF', label: 'Right Field' },
+    { key: 'ROVER', label: 'Rover / Short Fielder' }
+  ]);
+
+  function slotsForGame(g) {
+    ensureRules(g);
+    return g.rules.outfieldConfig === 'rover' ? SLOTS_ROVER : SLOTS_4OF;
+  }
 
   function positionsSummary(g) {
     var wrap = el('div', { class: 'mb' }, [el('div', { class: 'small gold mb', text: 'Field Positions' })]);
     var chips = el('div', { class: 'chips' });
-    POSITION_SLOTS.forEach(function (slot) {
+    slotsForGame(g).forEach(function (slot) {
       var pid = g.positions && g.positions[slot.key];
       if (!pid) return;
       var p = Store.getPlayer(pid);
@@ -261,10 +314,11 @@
           return (a.name || '').localeCompare(c.name || '');
         });
 
+        var slots = slotsForGame(g);
         function refreshDupWarn() {
           var used = {};
           var dup = false;
-          POSITION_SLOTS.forEach(function (slot) {
+          slots.forEach(function (slot) {
             var pid = g.positions[slot.key];
             if (!pid) return;
             if (used[pid]) dup = true;
@@ -273,7 +327,7 @@
           warn.textContent = dup ? '⚠️ A player is assigned to more than one position.' : '';
         }
 
-        POSITION_SLOTS.forEach(function (slot) {
+        slots.forEach(function (slot) {
           var sel = el('select', { onchange: function () { g.positions[slot.key] = sel.value || undefined; if (!sel.value) delete g.positions[slot.key]; Store.saveGame(); refreshDupWarn(); } });
           sel.appendChild(el('option', { value: '', text: '— none —' }));
           roster.forEach(function (p) {
@@ -380,5 +434,61 @@
 
   function closeModal() { var m = document.querySelector('.modal-backdrop'); if (m) m.remove(); }
 
-  global.Games = { render: render, editGame: editGame, lineupBuilder: lineupBuilder, positionsEditor: positionsEditor, positionsSummary: positionsSummary, POSITION_SLOTS: POSITION_SLOTS, gameDetail: gameDetail, boxScore: boxScore, lineScoreTable: lineScoreTable };
+  /* ---- Slow-pitch rules editor ---- */
+  function rulesEditor(id) {
+    var g = Store.getGame(id);
+    if (!g) return;
+    ensureRules(g);
+    var r = g.rules;
+
+    U.modal({
+      title: 'Slow-Pitch Rules',
+      body: function (b, close) {
+        b.appendChild(el('p', { class: 'small muted mb', text: 'These rules apply to this game and drive the live scorekeeper.' }));
+
+        var startVal = r.startingCount.balls + '-' + r.startingCount.strikes;
+        var startSel = Players.selectField('Starting count (balls-strikes)', startVal,
+          ['0-0', '1-1', '0-1', '1-0'], ['0-0 (standard)', '1-1 (slow-pitch)', '0-1', '1-0']);
+
+        var foulSel = Players.selectField('Foul on the third strike is an out', String(r.foulOnThirdStrikeIsOut),
+          ['false', 'true'], ['No', 'Yes']);
+
+        var hrVal = r.hrLimit == null ? 'none' : String(r.hrLimit);
+        var hrSel = Players.selectField('Home run limit (per team)', hrVal,
+          ['none', '2', '3', '4', '5', '6'], ['No limit', '2', '3', '4', '5', '6']);
+
+        var overSel = Players.selectField('Over-the-limit home run counts as', r.overLimitHrResult,
+          ['out', 'single'], ['An out', 'A single']);
+
+        var ofSel = Players.selectField('Outfield configuration', r.outfieldConfig,
+          ['4OF', 'rover'], ['4 Outfielders', 'Rover (3 OF + rover)']);
+
+        b.appendChild(startSel.wrap);
+        b.appendChild(foulSel.wrap);
+        b.appendChild(el('div', { class: 'grid-2' }, [hrSel.wrap, overSel.wrap]));
+        b.appendChild(ofSel.wrap);
+
+        b.appendChild(el('button', { class: 'btn primary block mt', text: 'Save Rules', onclick: function () {
+          var sc = startSel.input.value.split('-');
+          r.startingCount = { balls: parseInt(sc[0], 10), strikes: parseInt(sc[1], 10) };
+          r.foulOnThirdStrikeIsOut = foulSel.input.value === 'true';
+          r.hrLimit = hrSel.input.value === 'none' ? null : parseInt(hrSel.input.value, 10);
+          r.overLimitHrResult = overSel.input.value;
+          r.outfieldConfig = ofSel.input.value;
+          Store.saveGame();
+          close();
+          App.refresh();
+          U.toast('Rules saved');
+        }}));
+      }
+    });
+  }
+
+  global.Games = {
+    render: render, editGame: editGame, lineupBuilder: lineupBuilder,
+    positionsEditor: positionsEditor, positionsSummary: positionsSummary,
+    slotsForGame: slotsForGame, rulesEditor: rulesEditor,
+    ensureRules: ensureRules, defaultRules: defaultRules,
+    gameDetail: gameDetail, boxScore: boxScore, lineScoreTable: lineScoreTable
+  };
 })(window);
